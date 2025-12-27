@@ -3,6 +3,7 @@
 
 (defvar *default-input-method* nil
   "The default input method to fall back on")
+
 (defvar *current-input-method* nil
   "The current input-method")
 
