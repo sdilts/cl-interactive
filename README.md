@@ -37,9 +37,8 @@ which reads another command and calls it interactively.
                                    &optional (database *default-command-database*))
   (declare (ignore command argument-name)
            (optimize (debug 3)))
-  (let* ((comps (prepare-completions-for-input-method input-method database))
-         (cmd (completing-read input-method "Enter a command" :completions comps
-                                                              :require-match t)))
+  (let ((cmd (completing-read input-method "Enter a command" :completions comps
+                                                             :require-match t)))
     (search-in-database database cmd :from-beginning t :partial nil)))
 
 (define-command execute-extended-command
