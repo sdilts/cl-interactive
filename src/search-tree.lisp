@@ -9,6 +9,7 @@
                      t) ; contains-with
                t)))     ; subnodes
 
+;; NOTE [20:12 26.12.2025]: This is a bit of a misnomer, since they arent slots.
 (defmacro with-search-tree-node-slots ((char begin contain subnodes) node
                                        &body body)
   "Bind CHAR BEGIN CONTAIN and SUBNODES to their relevant parts of the list NODE
@@ -68,7 +69,7 @@ using symbol-macrolet for the duration of BODY."
 
 (defun add-character-list-to-tree (tree chars store-value)
   ;; Intern every char in charlist at the top level, as well as
-  ;; recursively. This allows partial searches
+  ;; recursively. This allows partial searches.
   (loop for c on chars
         for beg = t then nil
         for found = (find (car c) (roots-list tree)

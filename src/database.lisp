@@ -75,7 +75,7 @@ the tree)."
 
 (defgeneric database-strings (database &optional type)
   (:documentation "Return all strings from DATABASE that are of type TYPE
-(either :local,:canonical, :both, T, or NIL. :both, T and NIL return all
+(either :LOCAL, :CANONICAL, :BOTH, T, or NIL. :BOTH, T and NIL return all
 strings)."))
 
 (defmethod database-strings ((database database)
@@ -103,7 +103,9 @@ relevant if PARTIAL is T.
 
 Return DEFAULT if no objects were found to match STRING."))
 
-(defgeneric add-to-database (database object local-string canonical-string))
+(defgeneric add-to-database (database object local-string canonical-string)
+  (:documentation "Add OBJECT to DATABASE, interned under LOCAL-STRING and
+CANONICAL-STRING"))
 
 (defmethod search-in-database ((database database) (string string)
                                &key partial from-beginning default

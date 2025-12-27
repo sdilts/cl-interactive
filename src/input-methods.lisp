@@ -7,16 +7,31 @@
 (defvar *current-input-method* nil
   "The current input-method")
 
-(defclass input-method () ())
+(defclass input-method () ()
+  (:documentation "The root input method class"))
 
 (defun input-method (&optional input-method)
-  "Return the relevant input method."
+  "Return an appropriate input method, or signal an error. If INPUT-METHOD is
+non-nil it is used, otherwise if the *CURRENT-INPUT-METHOD* is non-nil it is
+used, otherwise if the *DEFAULT-INPUT-METHOD* is non-nil it is used. Otherwise
+an error is signalled. "
   (let ((input-method
-          (or input-method *current-input-method* *default-input-method*)))
+          (or input-method *current-input-method* *default-input-method*
+              (restart-case (error "No input method")
+                (make-input-method (sym &rest args)
+                  :report "Provide a symbol denoting an input method to use"
+                  :interactive (lambda ()
+                                 (format *query-io* "Enter input method class")
+                                 (force-output *query-io*)
+                                 (list (read *query-io*)))
+                  (apply #'make-instance sym args))))))
     (check-type input-method input-method)
     input-method))
 
 (defun interactive-error-handler-for-input-method (&optional input-method)
+  "Handle errors interactively using an input method. If INPUT-METHOD is a
+function it will be called in the handler and must return either NIL or an input
+method object."
   (flet ((handler (c)
            (handler-bind
                ((error
@@ -69,6 +84,7 @@ If there is no applicable method, signals an UNPREPARED-COMPLETIONS-ERROR.")
       (cadr args))))
 
 (defun prepare-completions (completions &optional (input-method (input-method)))
+  "A simpler interface to PREPARE-COMPLETIONS-FOR-INPUT-METHOD"
   (with-simple-restart (use-completions "Use completions anyway")
     (prepare-completions-for-input-method input-method completions)))
 
@@ -83,38 +99,16 @@ result of calling prepare-completions-for-input-method, and may be nil."))
                         &rest keys
                         &key completions require-match initial-input history
                         &allow-other-keys)
-  "Read input from the user with completions"
+  "Read input from the user with completions. Processes COMPLETIONS using
+PREPARE-COMPLETIONS-FOR-INPUT-METHOD, and calls INPUT-METHOD-READ with the
+resulting completions and other keys."
   (declare (ignore require-match initial-input history))
   (let ((comp (prepare-completions-for-input-method input-method completions)))
     (remf keys :completions)
     (apply #'input-method-read input-method prompt :completions comp keys)))
 
 (defun read-string (input-method prompt &rest keys &key initial-input history)
-  "Read a string from the user"
+  "Read a string from the user. Like COMPLETING-READ but only accepts the keys
+INITIAL-INPUT and HISTORY."
   (declare (ignore initial-input history))
   (apply #'input-method-read input-method prompt keys))
-
-(defgeneric read-with-completions (input-method prompt completions
-                                   &key require-match
-                                     initial-input history
-                                   &allow-other-keys)
-  (:documentation "Read input from the user using INPUT-METHOD."))
-
-(defun call-with-input-method-error-handling (handle-it input-method fn)
-  (case handle-it
-    ((:interactive)
-     (handler-bind ((cl-interactive-error
-                      (interactive-error-handler-for-input-method
-                       (input-method input-method))))
-       (funcall fn)))
-    ((:errors t)
-     (handler-bind ((error
-                      (interactive-error-handler-for-input-method
-                       (input-method input-method))))
-       (funcall fn)))
-    (otherwise (funcall fn))))
-
-(defmacro with-input-method-error-handling ((key input-method) &body body)
-  (let ((fn (gensym)))
-    `(flet ((,fn () ,@body))
-       (call-with-input-method-error-handling ,key ,input-method #',fn))))

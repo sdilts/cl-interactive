@@ -15,7 +15,8 @@
                          :accessor interactive-function)
    (pass-optional-and-key-to-interactive-function :initarg :pass-optional-key
                                                   :accessor pass-optional-key))
-  (:metaclass c2mop:funcallable-standard-class))
+  (:metaclass c2mop:funcallable-standard-class)
+  (:documentation "The command class. A subclass of generic functions."))
 
 (defmethod no-applicable-method ((gf command) &rest args)
   (error 'no-applicable-command-implementation
@@ -89,7 +90,9 @@ interactive argument list and obtains each argument using that list."
                             (case it
                               ((:default) (if (find-class is)
                                               (apply #'make-instance is ia)
-                                              is))
+                                              (etypecase is
+                                                (function is)
+                                                (symbol (symbol-function is)))))
                               ((:class) (apply #'make-instance is ia))
                               ((:function) (etypecase is
                                              (function is)
@@ -145,6 +148,8 @@ interactive argument list and obtains each argument using that list."
         (values nil t)))))
 
 (defun call-command-with-argument-list (command arguments-list)
+  "Invoke COMMAND with the arguments specified by ARGUMENTS-LIST. For internal use
+only."
   (declare (optimize (debug 3)))
   (let* ((ll (c2mop:generic-function-lambda-list command))
          (keys (member '&key ll))
@@ -176,7 +181,7 @@ interactive argument list and obtains each argument using that list."
 
  ;; Parsers and helpers for define-command
 (defun parse-interactive (interactive)
-  "Parse a user provided :INTERACTIVE option to define-command"
+  "Parse a user provided :INTERACTIVE option to define-command."
   (cond ((symbolp interactive)
          (return-from parse-interactive `(quote ,interactive)))
         ((consp interactive)
@@ -239,7 +244,7 @@ symbol, and the interactive arguments as multiple values"
 
 (defun parse-key-argument-for-define-command (argument)
   "Return the argument keyword, argument name, interactive type, interactive
-symbol, and interactive arguments as multiple values"
+symbol, and interactive arguments as multiple values. For &KEY arguments only."
   (cond ((symbolp argument)
          (values (intern (string argument) :keyword)
                  argument))
@@ -278,6 +283,8 @@ arguments as multiple values"
         (t (error "Invalid interactive component ~S" component))))
 
 (defmacro with-options ((remaining &rest options) options-list &body body)
+  "Bind OPTIONS list to their relevant options in an options list (an alist) for
+the duration of BODY. Bind remaining options to REMAINING."
   (let ((r (gensym)))
     `(let* ((,remaining (copy-list ,options-list))
             ,@(mapcar (lambda (k)
@@ -292,17 +299,18 @@ arguments as multiple values"
 (defmacro define-command (name command-lambda-list &body body)
   "Define a generic function of class command.
 
-NAME will be the name of the generic function
+NAME will be the name of the generic function.
 
-COMMAND-LAMBDA-LIST is a command lambda list. It contains argument names
+COMMAND-LAMBDA-LIST is a command lambda list. It contains argument names,
 optionally with their interactive components. An interactive component is either
 a symbol denoting a class or a function, or a list of such a symbol and its
 arguments. If the list contains a keyword as its first element that keyword
-determines if the interactive component names a function or a class. When
-constructing a class make-instance is applied to the symbol and its provided
-arguments. When calling a function the function is applied to the command, input
-method, argument name, and its provided arguments. The shape of a command lambda
-list is as follows:
+determines if the interactive component names a function or a class. If no
+keyword is provided then classes are preferred to functions when a class
+exists. When constructing a class make-instance is applied to the symbol and its
+provided arguments. When calling a function the function is applied to the
+command, input method, argument name, and its provided arguments. The shape of a
+command lambda list is as follows:
 
 ({A | (A [{symbol | ([keyword] symbol argument*)}])}*
  [&optional {A | (A [{symbol | ([keyword] symbol argument*)}])}*]
@@ -314,11 +322,11 @@ BODY is the set of valid options for defgeneric, with the following additions:
 
 :INTERACTIVE, which if provided must be a valid value to FUNCTION. If provided
 and arguments still need to be obtained, this function is called with four
-arguments: the command, the input method, two alists an alist mapping argument
-names to their values. The first of these alists hold unobtained arguments, the
-second holds obtained arguments. Either of these alists may be destructively
-modified in order to give arguments their new values. The argument names are the
-symbols provided in the command lambda list.
+arguments: the command, the input method, and two alists mapping argument names
+to their values. The first of these alists hold unobtained arguments, the second
+holds obtained arguments. The entries of these alists - but not the alists
+themselves - may be destructively modified to give arguments their values. The
+argument names are the symbols provided in the command lambda list.
 
 :READ-MISSING-NONPOSITIONALS-INTERACTIVELY, which if T passes any missing
 optional or key arguments to the provided interactive function in addition to
@@ -331,7 +339,9 @@ calling a command interactively."
         (parse-arguments-for-define-command command-lambda-list)
       (with-options (remaining interactive
                                read-missing-nonpositionals-interactively
-                               database)
+                               database
+                               canonical-name
+                               no-canonical-name)
                     body
         `(progn
            (defgeneric ,name ,defgen-ll
@@ -341,12 +351,14 @@ calling a command interactively."
                  ,read-missing-nonpositionals-interactively
                  (interactive-function #',name)
                  ,(parse-interactive interactive))
-           (add-to-database ,(if database
-                                 `(or ,database *default-command-database*)
-                                 '*default-command-database*)
-                            #',name
-                            nil
-                            (string ',name))
+           (unless no-canonical-name
+             (add-to-database ,(if database
+                                   `(or ,database *default-command-database*)
+                                   '*default-command-database*)
+                              #',name
+                              nil
+                              (or (and canonical-name (string canonical-name))
+                                  (string ',name))))
            (let ((,components
                    ,(cons 'list
                           (mapcar (lambda (com)
