@@ -10,3 +10,10 @@
                              (:file "input-methods")
                              (:file "commands")))))
 
+(asdf:defsystem #:cl-interactive/test
+  :depends-on (#:cl-interactive)
+  :serial t
+  :components ((:module #:test
+                :components ((:file "package")
+                             (:file "database")))))
+

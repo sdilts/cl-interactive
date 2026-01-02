@@ -42,8 +42,8 @@ using symbol-macrolet for the duration of BODY."
 (defun add-value-to-search-tree-node (node value &key beginning?)
   (with-search-tree-node-slots (char b c sub) node
     (if beginning?
-        (push value b)
-        (push value c))))
+        (pushnew value b)
+        (pushnew value c))))
 
 (defun recurse-and-add-to-search-tree (node charbag value &key beginning?)
   (with-search-tree-node-slots (ch b c s) node
