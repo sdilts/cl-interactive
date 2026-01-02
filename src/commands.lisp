@@ -348,17 +348,19 @@ calling a command interactively."
              (:generic-function-class command)
              ,@remaining)
            (setf (pass-optional-key #',name)
-                 ,read-missing-nonpositionals-interactively
+                 ,(cadr read-missing-nonpositionals-interactively)
                  (interactive-function #',name)
-                 ,(parse-interactive interactive))
-           (unless no-canonical-name
-             (add-to-database ,(if database
-                                   `(or ,database *default-command-database*)
-                                   '*default-command-database*)
-                              #',name
-                              nil
-                              (or (and canonical-name (string canonical-name))
-                                  (string ',name))))
+                 ,(parse-interactive (cdr interactive)))
+           ,@(unless (cadr no-canonical-name)
+               `((add-to-database ,(if database
+                                       `(or ,(cadr database)
+                                            *default-command-database*)
+                                       '*default-command-database*)
+                                  #',name
+                                  nil
+                                  (or (and ,(cadr canonical-name)
+                                           (string ,(cadr canonical-name)))
+                                      (string ',name)))))
            (let ((,components
                    ,(cons 'list
                           (mapcar (lambda (com)
