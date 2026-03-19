@@ -26,6 +26,8 @@
 
            #:read-argument-interactively
            #:call-command-interactively
+           #:gather-args-interactively
+           #:call-command-with-argument-list
 
            #:database
            #:make-database
@@ -111,6 +113,8 @@
                 #:compute-interactive-component-value
                 #:read-argument-interactively
                 #:call-command-interactively
+                #:gather-args-interactively
+                #:call-command-with-argument-list
 
                 #:input-method
                 #:*default-input-method*
@@ -125,6 +129,3 @@
                 #:unknown-completions-error
                 #:unprepared-completions-error
                 #:not-a-command-error))
-
-
-
