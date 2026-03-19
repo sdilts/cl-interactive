@@ -63,6 +63,13 @@ may be any object.")
 (defun call-command-interactively (command &key (input-method (input-method)))
   "Call COMMAND interactively using INPUT-METHOD. This function loops through the
 interactive argument list and obtains each argument using that list."
+  (multiple-value-bind (func arg-list) (gather-args-interactively command
+                                                                  :input-method input-method)
+    (when func
+      (call-command-with-argument-list func arg-list))))
+
+(defun gather-args-interactively (command &key (input-method (input-method)))
+  "Gather the arguments for COMMAND interactively"
   (declare (optimize (debug 3)))
   (let ((command (if (symbolp command) (symbol-function command) command))
         (*current-input-method* input-method))
@@ -142,14 +149,16 @@ interactive argument list and obtains each argument using that list."
                      (when (eql (cdr arg) 'argument-interactive-placeholder)
                        (setf (cdr arg) nil)))
                    argument-list)
-              (call-command-with-argument-list command argument-list))))
+              (values command argument-list))))
       (abort-command ()
         :report "Abort command"
-        (values nil t)))))
+        (values nil)))))
 
 (defun call-command-with-argument-list (command arguments-list)
-  "Invoke COMMAND with the arguments specified by ARGUMENTS-LIST. For internal use
-only."
+  "Invoke COMMAND with the arguments specified by ARGUMENTS-LIST. ARGUMENTS-LIST
+is a plist with the key being the name of the argument and the value being
+the value of the argument. It's best to use gather-args-interactively to
+construct it."
   (declare (optimize (debug 3)))
   (let* ((ll (c2mop:generic-function-lambda-list command))
          (keys (member '&key ll))
@@ -179,7 +188,7 @@ only."
             (*interactive* t))
         (apply *current-interactive-command* *current-interactive-arguments*)))))
 
- ;; Parsers and helpers for define-command
+;; Parsers and helpers for define-command
 (defun parse-interactive (interactive)
   "Parse a user provided :INTERACTIVE option to define-command."
   (cond ((symbolp interactive)

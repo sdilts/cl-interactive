@@ -18,6 +18,8 @@
            #:interactive-error-handler-for-input-method
 
            #:command
+           #:gather-args-interactively
+           #:call-command-with-argument-list
            #:define-command
            #:no-applicable-command-implementation
 
@@ -26,6 +28,8 @@
 
            #:read-argument-interactively
            #:call-command-interactively
+           #:gather-args-interactively
+           #:call-command-with-argument-list
 
            #:database
            #:make-database
@@ -108,9 +112,12 @@
                 #:define-command
                 #:no-applicable-command-implementation
                 #:interactive-component
+                #:interactive-components
                 #:compute-interactive-component-value
                 #:read-argument-interactively
                 #:call-command-interactively
+                #:gather-args-interactively
+                #:call-command-with-argument-list
 
                 #:input-method
                 #:*default-input-method*
@@ -125,6 +132,3 @@
                 #:unknown-completions-error
                 #:unprepared-completions-error
                 #:not-a-command-error))
-
-
-
