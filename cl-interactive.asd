@@ -11,7 +11,7 @@
                              (:file "commands")))))
 
 (asdf:defsystem #:cl-interactive/test
-  :depends-on (#:cl-interactive)
+  :depends-on (#:cl-interactive #:fiveam)
   :serial t
   :components ((:module #:test
                 :components ((:file "package")
