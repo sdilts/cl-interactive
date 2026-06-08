@@ -42,8 +42,12 @@ method object."
                                          input-method))))
                (when (and rs im)
                  (flet ((rn (r) (format nil "~A" r)))
-                   (let ((r (completing-read im (format nil "~A" c)
-                                             :completions (mapcar #'rn rs))))
+                   (let ((r (handler-bind
+                                ((error (lambda (condition)
+                                          (declare (ignore condition))
+                                          (invoke-restart 'abort-interactive-error-handler))))
+                              (completing-read im (format nil "~A" c)
+                                               :completions (mapcar #'rn rs)))))
                      (when r
                        (let ((r (find r rs :key #'rn :test #'string=)))
                          (when r
