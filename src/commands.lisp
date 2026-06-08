@@ -158,37 +158,62 @@ interactive argument list and obtains each argument using that list."
         :report "Abort command"
         (values nil)))))
 
+(defun %extract-param-types (ll)
+  "Separate the lambda list into POSITIONAL, OPTIONAL, and KEY lists"
+  (let ((front ll))
+    (flet ((gather-until (keys)
+             (do ((head (car front) (car front))
+			      (items))
+			     ((or (member head keys :test #'eql) (not front)) (nreverse items))
+		       (push head items)
+		       (setf front (rest front)))))
+      (let ((positional (gather-until '(&key &optional)))
+            (optional nil)
+            (key-lst nil))
+        (when (eql (car front) '&optional)
+          (setf front (cdr front))
+          (setf optional (gather-until '(&key &aux))))
+        (when (eql (car front) '&key)
+          (setf front (cdr front))
+          (setf key-lst (gather-until '(&allow-other-keys &aux))))
+        (values positional
+                optional
+                key-lst)))))
+
+(defun %build-arg-list (ll arguments-list)
+  (multiple-value-bind (positionals optionals keys)
+      (%extract-param-types ll)
+    (flet ((find-matching-positional (arg)
+             (let ((found (find arg arguments-list :key #'car)))
+                 (if found
+                     (cdr found)
+                     (error (format nil "No argument in ~S matching ~S"
+                                    arguments-list arg))))))
+    (nconc
+     (mapcar #'find-matching-positional
+             positionals)
+     (mapcar #'find-matching-positional
+             optionals)
+     (mapcon (lambda (arg)
+               (let* ((inner (car arg))
+                      (name (if (listp inner)
+                                (second (car inner))
+                                inner))
+                      (found (find name arguments-list :key #'car)))
+                 (when found
+                   (list (intern (string name) :keyword) (cdr found)))))
+             keys)))))
+
 (defun call-command-with-argument-list (command arguments-list)
   "Invoke COMMAND with the arguments specified by ARGUMENTS-LIST. For internal use
 only."
   (declare (optimize (debug 3)))
-  (let* ((ll (c2mop:generic-function-lambda-list command))
-         (keys (member '&key ll))
-         (keys (loop for key in keys until (member key '(&aux &allow-other-keys))
-                     collect key)))
-    (multiple-value-bind (normals keyargs)
-        (loop for arg in arguments-list
-              for found = (find (car arg) keys
-                                :key (lambda (k) (if (atom k) k (cadar k)))
-                                :test #'eql)
-              if found
-                collect (list found arg) into ks
-              else
-                collect arg into ns
-              finally (return (values ns ks)))
-      (let ((*current-interactive-command* command)
-            (*current-interactive-arguments*
-              (append (mapcar #'cdr normals)
-                      (mapcan (lambda (k)
-                                (let ((k (car k))
-                                      (a (cdr k)))
-                                  (list (if (consp k)
-                                            (caar k)
-                                            (intern (string k) :keyword))
-                                        (cdr a))))
-                              keyargs)))
-            (*interactive* t))
-        (apply *current-interactive-command* *current-interactive-arguments*)))))
+  (let ((*current-interactive-command* command)
+        (*current-interactive-arguments*
+          (%build-arg-list (c2mop:generic-function-lambda-list command)
+                           arguments-list))
+        (*interactive* t))
+    (apply *current-interactive-command* *current-interactive-arguments*)))
 
 ;; Parsers and helpers for define-command
 (defun parse-interactive (interactive)
