@@ -15,5 +15,6 @@
   :serial t
   :components ((:module #:test
                 :components ((:file "package")
+                             (:file "commands")
                              (:file "database")))))
 

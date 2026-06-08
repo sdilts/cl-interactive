@@ -68,7 +68,8 @@ interactive argument list and obtains each argument using that list."
     (when func
       (call-command-with-argument-list func arg-list))))
 
-(defun gather-args-interactively (command &key (input-method (input-method)))
+(defun gather-args-interactively (command &key (input-method (input-method))
+                                            already-gathered)
   (declare (optimize (debug 3)))
   (let ((command (if (symbolp command) (symbol-function command) command))
         (*current-input-method* input-method))
@@ -120,9 +121,13 @@ interactive argument list and obtains each argument using that list."
                    (and (consp arg)
                         (eql (cdr arg) 'argument-interactive-placeholder))))
             (let* ((interactive-function (interactive-function command))
+                   (to-gather (set-difference (interactive-components command)
+                                              already-gathered :key #'car))
                    (argument-list
-                     (loop for (arg it is ia) in (interactive-components command)
-                           collect (cons arg (get-the-argument arg it is ia))))
+                     (nconc
+                      already-gathered
+                      (loop for (arg it is ia) in to-gather
+                            collect (cons arg (get-the-argument arg it is ia)))))
                    (still-needed
                      (remove-if-not #'argument-missing-p argument-list))
                    (obtained (remove-if #'argument-missing-p argument-list))
