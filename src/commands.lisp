@@ -257,7 +257,10 @@ multiple values."
                  (parse-positional-optional-rest-argument-for-define-command
                   argument)
                (push argname defgeneric-list)
-               (push (list argname it is ia) interactive-components)))
+               ;; When no interactive information is given,
+               ;; it's not an interactive argument:
+               (when (or it is ia)
+                 (push (list argname it is ia) interactive-components))))
             ((&key)
              (multiple-value-bind (argkey argname it is ia)
                  (parse-key-argument-for-define-command argument)
