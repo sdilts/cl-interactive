@@ -12,11 +12,7 @@
   ((interactive-components :initarg :interactive-components
                            :accessor interactive-components)
    (non-interactive-args :initarg :non-interactive-args
-                         :accessor non-interactive-args)
-   (interactive-function :initarg :interactive-function
-                         :accessor interactive-function)
-   (pass-optional-and-key-to-interactive-function :initarg :pass-optional-key
-                                                  :accessor pass-optional-key))
+                         :accessor non-interactive-args))
   (:metaclass c2mop:funcallable-standard-class)
   (:documentation "The command class. A subclass of generic functions."))
 
@@ -66,16 +62,7 @@ may be any object.")
                                              already-gathered)
   "Call COMMAND interactively using INPUT-METHOD. This function loops through the
 interactive argument list and obtains each argument using that list."
-  (let* ((cmd (if (symbolp command) (symbol-function command) command))
-         (gathered-symbols (mapcar #'car already-gathered))
-         (non-interactive (non-interactive-args cmd)))
-    (when (not (equal (intersection non-interactive
-                                    gathered-symbols)
-                      non-interactive))
-      (error 'missing-required-arguments-error
-             :command cmd
-             :missing-arguments (set-difference non-interactive
-                                                gathered-symbols)))
+  (let ((cmd (if (symbolp command) (symbol-function command) command)))
     (multiple-value-bind (func arg-list)
         (gather-args-interactively cmd
                                    :input-method input-method
@@ -95,20 +82,16 @@ interactive argument list and obtains each argument using that list."
                (interactive-error-handler-for-input-method (input-method))))
           (unless (typep command 'command)
             (error 'not-a-command-error :command command))
-          (flet ((compute-if-positionals-missing (still-needed)
-                   (let ((ll (c2mop:generic-function-lambda-list command)))
-                     (loop with &ers = '(&optional &rest &key &allow-other-keys)
-                           for el in ll
-                           until (member el &ers)
-                           when (find el still-needed :key #'car)
-                             do (return-from compute-if-positionals-missing t))
-                     nil))
-                 (get-missing-arguments (args)
-                   (remove-if-not (lambda (el)
-                                    (eql el 'argument-interactive-placeholder))
-                                  args
-                                  :key #'cdr))
-                 (get-the-argument (arg it is ia)
+          (let ((gathered-symbols (mapcar #'car already-gathered))
+                (non-interactive (non-interactive-args command)))
+            (when (not (equal (intersection non-interactive
+                                            gathered-symbols)
+                              non-interactive))
+              (error 'missing-required-arguments-error
+                     :command command
+                     :missing-arguments (set-difference non-interactive
+                                                        gathered-symbols))))
+          (flet ((get-the-argument (arg it is ia)
                    (let* ((inst
                             (case it
                               ((:default) (if (find-class is)
@@ -132,46 +115,14 @@ interactive argument list and obtains each argument using that list."
                      (compute-interactive-component-value command
                                                           arg
                                                           inst
-                                                          pre-value)))
-                 (argument-missing-p (arg)
-                   (and (consp arg)
-                        (eql (cdr arg) 'argument-interactive-placeholder))))
-            (let* ((interactive-function (interactive-function command))
-                   (to-gather (set-difference (interactive-components command)
+                                                          pre-value))))
+            (let* ((to-gather (set-difference (interactive-components command)
                                               already-gathered :key #'car))
                    (argument-list
                      (nconc
                       already-gathered
                       (loop for (arg it is ia) in to-gather
-                            collect (cons arg (get-the-argument arg it is ia)))))
-                   (still-needed
-                     (remove-if-not #'argument-missing-p argument-list))
-                   (obtained (remove-if #'argument-missing-p argument-list))
-                   (missing-positionals
-                     (compute-if-positionals-missing still-needed)))
-              ;; I'm not sure when compute-if-positionals-missing returns
-              ;; true, but it's not firing in the obvious case of not
-              ;; providing a value for a positional non-interactive-arg:
-              (when (and missing-positionals (null interactive-function))
-                (error 'no-interactive-function-error
-                       :command command
-                       :missing-arguments (get-missing-arguments argument-list)))
-              (when interactive-function
-                (funcall interactive-function
-                         command
-                         input-method
-                         still-needed
-                         obtained))
-              (when (compute-if-positionals-missing still-needed)
-                (cerror "Use NIL for missing arguments"
-                        'missing-required-arguments-error
-                        :command command
-                        :missing-arguments (get-missing-arguments argument-list)))
-              (map nil
-                   (lambda (arg)
-                     (when (eql (cdr arg) 'argument-interactive-placeholder)
-                       (setf (cdr arg) nil)))
-                   argument-list)
+                            collect (cons arg (get-the-argument arg it is ia))))))
               (values command argument-list))))
       (abort-command ()
         :report "Abort command"
@@ -237,16 +188,6 @@ construct it."
     (apply *current-interactive-command* *current-interactive-arguments*)))
 
 ;; Parsers and helpers for define-command
-(defun parse-interactive (interactive)
-  "Parse a user provided :INTERACTIVE option to define-command."
-  (cond ((symbolp interactive)
-         (return-from parse-interactive `(quote ,interactive)))
-        ((consp interactive)
-         (ecase (car interactive)
-           ((function lambda)
-            (return-from parse-interactive interactive)))))
-  (error 'invalid-interactive-function :provided interactive))
-
 (defun parse-arguments-for-define-command (arguments-list)
   "Given an list of arguments as provided to DEFINE-COMMAND, return the
 arguments as processed for a defgeneric form and an interactive argument list as
@@ -379,24 +320,7 @@ command lambda list is as follows:
  [&optional {A | (A [{symbol | ([keyword] symbol argument*)}])}*]
  [&rest {A | (A [{symbol | ([keyword] symbol argument*)}])}]
  [&key {A | ({A | (keyword-name A)} [{symbol | ([keyword] symbol argument*)}])}*]
- [&allow-other-keys])
-
-BODY is the set of valid options for defgeneric, with the following additions:
-
-:INTERACTIVE, which if provided must be a valid value to FUNCTION. If provided
-and arguments still need to be obtained, this function is called with four
-arguments: the command, the input method, and two alists mapping argument names
-to their values. The first of these alists hold unobtained arguments, the second
-holds obtained arguments. The entries of these alists - but not the alists
-themselves - may be destructively modified to give arguments their values. The
-argument names are the symbols provided in the command lambda list.
-
-:READ-MISSING-NONPOSITIONALS-INTERACTIVELY, which if T passes any missing
-optional or key arguments to the provided interactive function in addition to
-missing positional arguments.
-
-If an argument has an interactive component, it will always be prompted for when
-calling a command interactively."
+ [&allow-other-keys])"
   (let ((components (gensym)))
     (multiple-value-bind (defgen-ll interactive-components
                           non-interactive-args)
@@ -411,10 +335,6 @@ calling a command interactively."
            (defgeneric ,name ,defgen-ll
              (:generic-function-class command)
              ,@remaining)
-           (setf (pass-optional-key #',name)
-                 ,(cadr read-missing-nonpositionals-interactively)
-                 (interactive-function #',name)
-                 ,(parse-interactive (cdr interactive)))
            ,@(unless (cadr no-canonical-name)
                `((add-to-database ,(if database
                                        `(or ,(cadr database)

@@ -40,11 +40,26 @@
   (:method (one two)
     (format t "one: ~S two: ~S" one two)))
 
+(defclass dummy-input-method (cl-interactive:input-method) ()
+  (:documentation "Input method that uses foot and fzf for interactive input"))
+
+(defmacro with-input-method (class-name &body body)
+  `(let ((cl-interactive:*default-input-method* (make-instance ,class-name)))
+    ,@body))
+
 (fiveam:test call-command-interactively-missing-non-interactive-1
-  (fiveam:signals cl-interactive:missing-required-arguments-error
-    (cl-interactive:call-command-interactively #'no-interactive-positinals
-                                                 :already-gathered `((one . "one")))))
+  (with-input-method 'dummy-input-method
+    (fiveam:signals cl-interactive:missing-required-arguments-error
+      (cl-interactive:call-command-interactively #'no-interactive-positinals
+                                                 :already-gathered `((one . "one"))))))
 
 (fiveam:test call-command-interactively-missing-non-interactive-2
-  (fiveam:signals cl-interactive:missing-required-arguments-error
-    (cl-interactive:call-command-interactively #'no-interactive-positinals)))
+  (with-input-method 'dummy-input-method
+    (fiveam:signals cl-interactive:missing-required-arguments-error
+      (cl-interactive:call-command-interactively #'no-interactive-positinals))))
+
+(fiveam:test call-command-interactively-provided-non-interactive
+  (with-input-method 'dummy-input-method
+    (fiveam:signals cl-interactive:missing-required-arguments-error
+      (cl-interactive:call-command-interactively #'no-interactive-positinals
+                                                 :already-gathered `((one . "one") (two ."two"))))))
