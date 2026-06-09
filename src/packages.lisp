@@ -111,6 +111,7 @@
                 #:command
                 #:define-command
                 #:no-applicable-command-implementation
+                #:missing-required-arguments-error
                 #:interactive-component
                 #:interactive-components
                 #:compute-interactive-component-value

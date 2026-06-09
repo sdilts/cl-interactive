@@ -11,6 +11,8 @@
 (defclass command (c2mop:standard-generic-function)
   ((interactive-components :initarg :interactive-components
                            :accessor interactive-components)
+   (non-interactive-args :initarg :non-interactive-args
+                         :accessor non-interactive-args)
    (interactive-function :initarg :interactive-function
                          :accessor interactive-function)
    (pass-optional-and-key-to-interactive-function :initarg :pass-optional-key
@@ -60,13 +62,26 @@ may be any object.")
             compute-value-from &key &allow-other-keys)
     compute-value-from))
 
-(defun call-command-interactively (command &key (input-method (input-method)))
+(defun call-command-interactively (command &key (input-method (input-method))
+                                             already-gathered)
   "Call COMMAND interactively using INPUT-METHOD. This function loops through the
 interactive argument list and obtains each argument using that list."
-  (multiple-value-bind (func arg-list) (gather-args-interactively command
-                                                                  :input-method input-method)
-    (when func
-      (call-command-with-argument-list func arg-list))))
+  (let* ((cmd (if (symbolp command) (symbol-function command) command))
+         (gathered-symbols (mapcar #'car already-gathered))
+         (non-interactive (non-interactive-args cmd)))
+    (when (not (equal (intersection non-interactive
+                                    gathered-symbols)
+                      non-interactive))
+      (error 'missing-required-arguments-error
+             :command cmd
+             :missing-arguments (set-difference non-interactive
+                                                gathered-symbols)))
+    (multiple-value-bind (func arg-list)
+        (gather-args-interactively cmd
+                                   :input-method input-method
+                                   :already-gathered already-gathered)
+      (when func
+        (call-command-with-argument-list func arg-list)))))
 
 (defun gather-args-interactively (command &key (input-method (input-method))
                                             already-gathered)
@@ -134,6 +149,9 @@ interactive argument list and obtains each argument using that list."
                    (obtained (remove-if #'argument-missing-p argument-list))
                    (missing-positionals
                      (compute-if-positionals-missing still-needed)))
+              ;; I'm not sure when compute-if-positionals-missing returns
+              ;; true, but it's not firing in the obvious case of not
+              ;; providing a value for a positional non-interactive-arg:
               (when (and missing-positionals (null interactive-function))
                 (error 'no-interactive-function-error
                        :command command
@@ -236,9 +254,11 @@ multiple values."
   (let ((current-type '&positional)
         (defgeneric-list nil)
         (interactive-components nil)
+        (non-interactive-args nil)
         (rest-sentinel nil))
     (dolist (argument arguments-list (values (reverse defgeneric-list)
-                                             (reverse interactive-components)))
+                                             (reverse interactive-components)
+                                             non-interactive-args))
       (if (member argument '(&optional &rest &key &allow-other-keys))
           (setf current-type argument
                 defgeneric-list (cons argument defgeneric-list))
@@ -259,8 +279,9 @@ multiple values."
                (push argname defgeneric-list)
                ;; When no interactive information is given,
                ;; it's not an interactive argument:
-               (when (or it is ia)
-                 (push (list argname it is ia) interactive-components))))
+               (if (or it is ia)
+                   (push (list argname it is ia) interactive-components)
+                   (push argname non-interactive-args))))
             ((&key)
              (multiple-value-bind (argkey argname it is ia)
                  (parse-key-argument-for-define-command argument)
@@ -377,7 +398,8 @@ missing positional arguments.
 If an argument has an interactive component, it will always be prompted for when
 calling a command interactively."
   (let ((components (gensym)))
-    (multiple-value-bind (defgen-ll interactive-components)
+    (multiple-value-bind (defgen-ll interactive-components
+                          non-interactive-args)
         (parse-arguments-for-define-command command-lambda-list)
       (with-options (remaining interactive
                                read-missing-nonpositionals-interactively
@@ -415,4 +437,8 @@ calling a command interactively."
                                         com))
                                   interactive-components))))
              (setf (interactive-components #',name) ,components))
+           (setf (non-interactive-args #',name) (list ,@(mapcar
+                                                         (lambda (x)
+                                                           `(quote ,x))
+                                                         non-interactive-args)))
            #',name)))))

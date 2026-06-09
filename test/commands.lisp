@@ -35,3 +35,16 @@
      (equalp (cl-interactive/command::%build-arg-list
               ll args)
              '("pos1" "pos2" "foo" :key1 "key")))))
+
+(cl-interactive:define-command no-interactive-positinals (one two)
+  (:method (one two)
+    (format t "one: ~S two: ~S" one two)))
+
+(fiveam:test call-command-interactively-missing-non-interactive-1
+  (fiveam:signals cl-interactive:missing-required-arguments-error
+    (cl-interactive:call-command-interactively #'no-interactive-positinals
+                                                 :already-gathered `((one . "one")))))
+
+(fiveam:test call-command-interactively-missing-non-interactive-2
+  (fiveam:signals cl-interactive:missing-required-arguments-error
+    (cl-interactive:call-command-interactively #'no-interactive-positinals)))
