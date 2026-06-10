@@ -325,11 +325,10 @@ command lambda list is as follows:
     (multiple-value-bind (defgen-ll interactive-components
                           non-interactive-args)
         (parse-arguments-for-define-command command-lambda-list)
-      (with-options (remaining interactive
-                               read-missing-nonpositionals-interactively
-                               database
-                               canonical-name
-                               no-canonical-name)
+      (with-options (remaining
+                     database
+                     canonical-name
+                     no-canonical-name)
                     body
         `(progn
            (defgeneric ,name ,defgen-ll

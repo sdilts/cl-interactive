@@ -36,7 +36,7 @@
               ll args)
              '("pos1" "pos2" "foo" :key1 "key")))))
 
-(cl-interactive:define-command no-interactive-positinals (one two)
+(cl-interactive:define-command no-interactive-positionals (one two)
   (:method (one two)
     (format t "one: ~S two: ~S" one two)))
 
@@ -50,16 +50,22 @@
 (fiveam:test call-command-interactively-missing-non-interactive-1
   (with-input-method 'dummy-input-method
     (fiveam:signals cl-interactive:missing-required-arguments-error
-      (cl-interactive:call-command-interactively #'no-interactive-positinals
+      (cl-interactive:call-command-interactively #'no-interactive-positionals
                                                  :already-gathered `((one . "one"))))))
 
 (fiveam:test call-command-interactively-missing-non-interactive-2
   (with-input-method 'dummy-input-method
     (fiveam:signals cl-interactive:missing-required-arguments-error
-      (cl-interactive:call-command-interactively #'no-interactive-positinals))))
+      (cl-interactive:call-command-interactively #'no-interactive-positionals))))
+
+(fiveam:test gather-args-interactively-missing-non-interactive
+  (with-input-method 'dummy-input-method
+    (fiveam:signals cl-interactive:missing-required-arguments-error
+      (cl-interactive:gather-args-interactively #'no-interactive-positionals))))
 
 (fiveam:test call-command-interactively-provided-non-interactive
   (with-input-method 'dummy-input-method
-    (fiveam:signals cl-interactive:missing-required-arguments-error
-      (cl-interactive:call-command-interactively #'no-interactive-positinals
-                                                 :already-gathered `((one . "one") (two ."two"))))))
+    (let ((gathered `((one . "one") (two ."two"))))
+      (fiveam:signals cl-interactive:missing-required-arguments-error
+        (cl-interactive:call-command-interactively #'no-interactive-positionals
+                                                   :already-gathered gathered)))))
