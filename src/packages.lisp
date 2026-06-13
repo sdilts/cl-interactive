@@ -18,6 +18,7 @@
            #:interactive-error-handler-for-input-method
 
            #:command
+           #:with-gathered-args
            #:gather-args-interactively
            #:call-command-with-argument-list
            #:define-command
@@ -116,6 +117,7 @@
                 #:interactive-components
                 #:compute-interactive-component-value
                 #:read-argument-interactively
+                #:with-gathered-args
                 #:call-command-interactively
                 #:gather-args-interactively
                 #:call-command-with-argument-list

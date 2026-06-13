@@ -58,6 +58,20 @@ may be any object.")
             compute-value-from &key &allow-other-keys)
     compute-value-from))
 
+(defmacro with-gathered-args (arg-spec name &body body)
+  "Place the given arguments and their names into a data structure suitable for
+passing to CALL-COMMAND-INTERACTIVELY.
+
+Example creating args var with argument FOO:
+(with-gathered-args ((foo \"foo-value\"))
+     args
+  ...)"
+  `(let ((,name (list ,@(mapcar (lambda (x)
+                                  `(cons (quote ,(car x))
+                                         ,(cadr x)))
+                                arg-spec))))
+     ,@body))
+
 (defun call-command-interactively (command &key (input-method (input-method))
                                              already-gathered)
   "Call COMMAND interactively using INPUT-METHOD. This function loops through the
