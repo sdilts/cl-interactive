@@ -166,3 +166,56 @@ CLASS-GATHERER : (:class class-designator arg)
 
 DEFAULT-GATHERER : (:default designator args)
 ```
+
+You can supply the values for non-interative arguments by passing a datastructure
+into the `already-gathered` argument of `call-command-interactively`
+and `gather-args-interactively`. This is the the only way to supply
+non-interactive arguments, but it can be used to supply interactive
+arguments as well.
+
+#### :function specifiers
+
+When a function is in the interactive arg spec, it gets four
+positional parameters:
++ `command`: The command that the args are being gathered for
++ `input-method`: The input method that should be used to gather the
+  argument value.
++ `arg-symbol`: The symbol of the argument that is being gathered
++ `arg`: The arg specified as the last item in the argument specification.
+
+#### Example
+
+``` lisp
+(cl-interactive:define-command example (foo (bar (:function #'func)))
+  (format t "Interactive arg: ~S, Non-interactive arg: ~S"
+		  bar foo))
+```
+The above code creates a command called `example`, with an interactive
+argument called `bar` and a non-interactive one called `foo`. This is
+a normal function, and you can call it like you would any other:
+``` lisp
+(example "foo" "bar")
+;; Prints 'Interactive arg: "bar", Non-interactive arg: "foo"'
+```
+
+To invoke this function and gather the arguments interactively, you can
+use the `call-interactively` function:
+
+``` lisp
+(cl-interactive:with-gathered-args ((bar "bar"))
+    args
+  (cl-interactive:call-command-interactively #'example
+											 :already-gathered args))
+```
+This will call the `#'func` function in the `define-command` form
+above to be called, and the result it returns will be passed in as the
+`foo` argument to the `example` command.
+
+Notably, if you use `call-command-interactively` without specifying
+non-interactive arguments, you get an error:
+
+``` lisp
+;; Raises signal along the lines of
+;; "No argument in {(FOO . "value")) matching BAR".
+(cl-interactive:call-command-interactively #'example)
+```
