@@ -148,13 +148,21 @@ Input methods MUST descend from the root class `input-method`.
 This package implements command definition and interactive invocation. Commands
 are defined by the macro `DEFINE-COMMAND`, which is similar to defgeneric.
 Instead of a defgeneric lambda list commands take a command lambda list, which
-takes arguments that optionally have an interactive component specified.
-Additionally, the `:interactive` option to `define-command` may be provided,
-which must be a function of four arguments: the command, the input method, an
-alist mapping unobtained arguments to their values, an an alist of obtained
-arguments. The individual conses of these alists are shared between them and the
-overall arguments list, and should be destructively modified in order to give
-arguments their new values. Interactive components in the command lambda list
-take priority over interactive functions. If the interactive function was
-provided it will be called regardless of whether or not all arguments were
-obtained.
+takes arguments that optionally have an interactive component
+specified. `&optional`, `&key`, `&allow-other-keys` have their normal
+meaning, but all other symbols in the lambda list can follow this form:
+
+```
+COMMAND-ARG : NON-INTERACTIVE | INTERACTIVE-ARG
+;; this is just a normal, non interactive argument:
+NON-INTERACTIVE : arg-name
+;; There's three ways to specify how to get interactive arguments;
+;; either by a function or a class:
+INTERACTIVE-ARG : (arg-name FUNCTION-GATHERER | CLASS-GATHERER | DEFAULT-GATHERER)
+
+FUNCTION-GATHERER : (:function func-name arg)
+
+CLASS-GATHERER : (:class class-designator arg)
+
+DEFAULT-GATHERER : (:default designator args)
+```
