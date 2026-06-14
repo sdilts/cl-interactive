@@ -286,6 +286,19 @@ symbol, and interactive arguments as multiple values. For &KEY arguments only."
                   :type :key
                   :argument argument))))
 
+(defun %process-interactive-spec (spec)
+  (let ((interactive-type (car spec))
+        (interactive-symb (cadr spec)))
+    (let ((valid-type '(:default :class :function)))
+      (unless (member interactive-type valid-type)
+        (error "Invalid interactive component ~S.~%Interactive type must be one of ~S, not ~S"
+               spec valid-type interactive-type)))
+    (when (and (eql :function interactive-type)
+               (consp interactive-symb)
+               (eql 'function (car interactive-symb)))
+      (setf interactive-symb (symbol-function (second interactive-symb))))
+    (values interactive-type interactive-symb (cddr spec))))
+
 (defun parse-interactive-component (component)
   "Return the interactive type, the interactive symbol, and the interactive
 arguments as multiple values"
@@ -294,7 +307,7 @@ arguments as multiple values"
          (values :default component))
         ((and (consp component)
               (keywordp (car component)))
-         (values (car component) (cadr component) (cddr component)))
+         (%process-interactive-spec component))
         ((and (consp component)
               (symbolp (car component)))
          (values :default (car component) (cdr component)))
