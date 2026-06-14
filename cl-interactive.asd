@@ -5,10 +5,10 @@
   :in-order-to ((test-op (test-op cl-interactive/test)))
   :components ((:module #:src
                 :components ((:file "packages")
+                             (:file "input-methods")
                              (:file "conditions")
                              (:file "search-tree")
                              (:file "database")
-                             (:file "input-methods")
                              (:file "commands")))))
 
 (asdf:defsystem #:cl-interactive/test

@@ -15,7 +15,6 @@
            #:read-string
            #:input-method-read
            #:with-input-method-error-handling
-           #:interactive-error-handler-for-input-method
 
            #:command
            #:with-gathered-args
@@ -101,6 +100,7 @@
                 #:with-input-method-error-handling
                 #:interactive-error-handler-for-input-method
                 #:cl-interactive-error
+                #:unprepared-completions-error
                 #:abort-interactive-command))
 
 (uiop:define-package #:cl-interactive/command

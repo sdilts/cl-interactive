@@ -99,9 +99,7 @@ interactive argument list and obtains each argument using that list."
   (let ((command (if (symbolp command) (symbol-function command) command))
         (*current-input-method* input-method))
     (restart-case
-        (handler-bind
-            ((error
-               (interactive-error-handler-for-input-method (input-method))))
+        (cl-interactive/input-method::with-interactive-error-handler (input-method)
           (unless (typep command 'command)
             (error 'not-a-command-error :command command))
           (let ((gathered-symbols (mapcar #'car already-gathered))
@@ -112,7 +110,8 @@ interactive argument list and obtains each argument using that list."
               (error 'missing-required-arguments-error
                      :command command
                      :missing-arguments (set-difference non-interactive
-                                                        gathered-symbols))))
+                                                        gathered-symbols)
+                     :given gathered-symbols)))
           (flet ((get-the-argument (arg spec)
                    (declare (type interactive-spec spec))
                    (with-accessors ((it interactive-spec-type)
@@ -298,7 +297,7 @@ symbol, and interactive arguments as multiple values. For &KEY arguments only."
   (let ((valid-type '(:default :class :function)))
     (unless (member interactive-type valid-type)
       (error "Invalid interactive component ~S.~%Interactive type must be one of ~S, not ~S"
-             spec valid-type interactive-type)))
+             interactive-type valid-type interactive-type)))
   ;; Assume that when someone writes #'foo, they want to check that
   ;; a function foo exists at compile time:
   (when (and (eql :function interactive-type)

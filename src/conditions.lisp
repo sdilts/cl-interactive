@@ -26,12 +26,14 @@
 
 (define-condition missing-required-arguments-error (cl-interactive-error)
   ((command :initarg :command :reader mrae-command)
-   (arguments :initarg :missing-arguments :reader mrae-arguments))
+   (arguments :initarg :missing-arguments :reader mrae-arguments)
+   (given :initarg :given :initform nil :reader mrea-given))
   (:report
    (lambda (c s)
-     (format s "~A is missing required (positional) arguments:~%~A"
+     (format s "~A is missing required (positional) arguments:~%~A.~%Given: ~A"
              (mrae-command c)
-             (mrae-arguments c)))))
+             (mrae-arguments c)
+             (mrea-given c)))))
 
 (define-condition no-interactive-function-error (missing-required-arguments-error)
   ()

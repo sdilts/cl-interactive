@@ -38,14 +38,24 @@
 
 (cl-interactive:define-command no-interactive-positionals (one two)
   (:method (one two)
-    (format t "one: ~S two: ~S" one two)))
+    (format nil "one: ~S two: ~S" one two)))
 
 (defclass dummy-input-method (cl-interactive:input-method) ()
-  (:documentation "Input method that uses foot and fzf for interactive input"))
+  (:documentation "Dummy input method"))
+
+(defmethod prepare-completions-for-input-method ((method dummy-input-method))
+  (declare (ignore method))
+  (list))
+
+(defmethod input-method-read ((method dummy-input-method)
+                              &key completions require-match initial-input
+                                history
+                                &allow-other-keys)
+  "string")
 
 (defmacro with-input-method (class-name &body body)
   `(let ((cl-interactive:*default-input-method* (make-instance ,class-name)))
-    ,@body))
+     ,@body))
 
 (fiveam:test call-command-interactively-missing-non-interactive-1
   (with-input-method 'dummy-input-method
@@ -53,19 +63,27 @@
       (cl-interactive:call-command-interactively #'no-interactive-positionals
                                                  :already-gathered `((one . "one"))))))
 
-(fiveam:test call-command-interactively-missing-non-interactive-2
+(fiveam:test gather-args-interactively-missing-non-interactive
   (with-input-method 'dummy-input-method
     (fiveam:signals cl-interactive:missing-required-arguments-error
       (cl-interactive:call-command-interactively #'no-interactive-positionals))))
 
-(fiveam:test gather-args-interactively-missing-non-interactive
-  (with-input-method 'dummy-input-method
-    (fiveam:signals cl-interactive:missing-required-arguments-error
-      (cl-interactive:gather-args-interactively #'no-interactive-positionals))))
-
 (fiveam:test call-command-interactively-provided-non-interactive
   (with-input-method 'dummy-input-method
-    (let ((gathered `((one . "one") (two ."two"))))
-      (fiveam:signals cl-interactive:missing-required-arguments-error
-        (cl-interactive:call-command-interactively #'no-interactive-positionals
-                                                   :already-gathered gathered)))))
+    (let* ((gathered `((one . "one") (two ."two")))
+           (result (cl-interactive:call-command-interactively
+                    #'no-interactive-positionals
+                    :already-gathered gathered)))
+      (fiveam:is
+       (string= result (format nil "one: \"one\" two: \"two\""))))))
+
+(defclass no-op-input-method (cl-interactive:input-method)
+  ())
+
+;; The difference with the tests above is that this will fail
+;; if the interactive debugging code doesn't work; you'll get
+;; a stack exhuasted error:
+(fiveam:test call-command-interactively-provided-non-interactive
+  (with-input-method 'dummy-input-method
+    (fiveam:signals cl-interactive:missing-required-arguments-error
+      (cl-interactive:call-command-interactively #'no-interactive-positionals))))
