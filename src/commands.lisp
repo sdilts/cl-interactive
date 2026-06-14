@@ -16,6 +16,14 @@
   (:metaclass c2mop:funcallable-standard-class)
   (:documentation "The command class. A subclass of generic functions."))
 
+(defstruct (interactive-spec (:constructor make-interactive-spec
+                                 (type symb arg)))
+  (type nil :type (member :default :function :class)
+            :read-only t)
+  (symb nil :type (or symbol function)
+            :read-only t)
+  (arg nil :read-only t))
+
 (defmethod no-applicable-method ((gf command) &rest args)
   (error 'no-applicable-command-implementation
          :command gf
@@ -105,38 +113,41 @@ interactive argument list and obtains each argument using that list."
                      :command command
                      :missing-arguments (set-difference non-interactive
                                                         gathered-symbols))))
-          (flet ((get-the-argument (arg it is ia)
-                   (let* ((inst
-                            (case it
-                              ((:default) (if (find-class is)
-                                              (apply #'make-instance is ia)
-                                              (etypecase is
-                                                (function is)
-                                                (symbol (symbol-function is)))))
-                              ((:class) (apply #'make-instance is ia))
-                              ((:function) (etypecase is
-                                             (function is)
-                                             (symbol (symbol-function is))))
-                              (otherwise (return-from get-the-argument
-                                           'argument-interactive-placeholder))))
-                          (pre-value
-                            (if (typep inst 'interactive-component)
-                                (read-argument-interactively command
-                                                             arg
-                                                             input-method
-                                                             inst)
-                                (apply inst command input-method arg ia))))
-                     (compute-interactive-component-value command
-                                                          arg
-                                                          inst
-                                                          pre-value))))
+          (flet ((get-the-argument (arg spec)
+                   (declare (type interactive-spec spec))
+                   (with-accessors ((it interactive-spec-type)
+                                    (is interactive-spec-symb)
+                                    (ia interactive-spec-arg))
+                       spec
+                     (let* ((inst
+                              (ecase it
+                                ((:default) (if (find-class is)
+                                                (apply #'make-instance is ia)
+                                                (etypecase is
+                                                  (function is)
+                                                  (symbol (symbol-function is)))))
+                                ((:class) (apply #'make-instance is ia))
+                                ((:function) (etypecase is
+                                               (function is)
+                                               (symbol (symbol-function is))))))
+                            (pre-value
+                              (if (typep inst 'interactive-component)
+                                  (read-argument-interactively command
+                                                               arg
+                                                               input-method
+                                                               inst)
+                                  (apply inst command input-method arg ia))))
+                       (compute-interactive-component-value command
+                                                            arg
+                                                            inst
+                                                            pre-value)))))
             (let* ((to-gather (set-difference (interactive-components command)
                                               already-gathered :key #'car))
                    (argument-list
                      (nconc
                       already-gathered
-                      (loop for (arg it is ia) in to-gather
-                            collect (cons arg (get-the-argument arg it is ia))))))
+                      (loop for (arg spec) in to-gather
+                            collect (cons arg (get-the-argument arg spec))))))
               (values command argument-list))))
       (abort-command ()
         :report "Abort command"
@@ -211,40 +222,42 @@ multiple values."
         (interactive-components nil)
         (non-interactive-args nil)
         (rest-sentinel nil))
-    (dolist (argument arguments-list (values (reverse defgeneric-list)
-                                             (reverse interactive-components)
-                                             non-interactive-args))
-      (if (member argument '(&optional &rest &key &allow-other-keys))
-          (setf current-type argument
-                defgeneric-list (cons argument defgeneric-list))
-          (ecase current-type
-            ((&rest)
-             (when (eql current-type '&rest)
-               (if rest-sentinel
-                   (error "Multiple &rest arguments provided")
-                   (setf rest-sentinel t)))
-             (assert (symbolp argument) (argument)
-                     "&REST arguments cannot have interactive components")
-             (push argument defgeneric-list)
-             (push (list argument '&rest nil nil) interactive-components))
-            ((&positional &optional)
-             (multiple-value-bind (argname it is ia)
-                 (parse-positional-optional-rest-argument-for-define-command
-                  argument)
-               (push argname defgeneric-list)
-               ;; When no interactive information is given,
-               ;; it's not an interactive argument:
-               (if (or it is ia)
-                   (push (list argname it is ia) interactive-components)
-                   (push argname non-interactive-args))))
-            ((&key)
-             (multiple-value-bind (argkey argname it is ia)
-                 (parse-key-argument-for-define-command argument)
-               (push (list (list argkey argname)) defgeneric-list)
-               (push (list argname it is ia) interactive-components)))
-            ((&allow-other-keys)
-             (error "&ALLOW-OTHER-KEYS must be the final symbol in~
-                     an interactive lambda list")))))))
+    (flet ((push-interactive (name spec)
+             (push (list name spec)
+                   interactive-components)))
+      (dolist (argument arguments-list (values (reverse defgeneric-list)
+                                               (reverse interactive-components)
+                                               non-interactive-args))
+        (if (member argument '(&optional &rest &key &allow-other-keys))
+            (setf current-type argument
+                  defgeneric-list (cons argument defgeneric-list))
+            (ecase current-type
+              ((&rest)
+               (when (eql current-type '&rest)
+                 (if rest-sentinel
+                     (error "Multiple &rest arguments provided")
+                     (setf rest-sentinel t)))
+               (assert (symbolp argument) (argument)
+                       "&REST arguments cannot have interactive components")
+               (push argument defgeneric-list))
+              ((&positional &optional)
+               (multiple-value-bind (argname spec)
+                   (parse-positional-optional-rest-argument-for-define-command
+                    argument)
+                 (push argname defgeneric-list)
+                 ;; When no interactive information is given,
+                 ;; it's not an interactive argument:
+                 (if spec
+                     (push-interactive argname spec)
+                     (push argname non-interactive-args))))
+              ((&key)
+               (multiple-value-bind (argkey argname spec)
+                   (parse-key-argument-for-define-command argument)
+                 (push (list (list argkey argname)) defgeneric-list)
+                 (push-interactive argname spec)))
+              ((&allow-other-keys)
+               (error "&ALLOW-OTHER-KEYS must be the final symbol in~
+                     an interactive lambda list"))))))))
 
 (defun parse-positional-optional-rest-argument-for-define-command (argument)
   "Return the argument name, the interactive type, the interactive
@@ -253,9 +266,8 @@ symbol, and the interactive arguments as multiple values"
          argument)
         ((and (consp argument)
               (symbolp (car argument)))
-         (multiple-value-bind (it is ia)
-             (parse-interactive-component (cadr argument))
-           (values (car argument) it is ia)))
+         (let ((spec (parse-interactive-component (cadr argument))))
+           (values (car argument) spec)))
         (t (error 'define-command-invalid-argument-error
                   :argument argument
                   :type "positional/optional/rest"))))
@@ -268,49 +280,57 @@ symbol, and interactive arguments as multiple values. For &KEY arguments only."
                  argument))
         ((and (consp argument)
               (symbolp (car argument)))
-         (multiple-value-bind (it is ia)
-             (parse-interactive-component (cadr argument))
+         (let ((spec (parse-interactive-component (cadr argument))))
            (values (intern (string (car argument)) :keyword)
                    (car argument)
-                   it
-                   is
-                   ia)))
+                   spec)))
         ((and (consp argument)
               (consp (car argument))
               (symbolp (caar argument))
               (symbolp (cadar argument)))
-         (multiple-value-bind (it is ia)
-             (parse-interactive-component (cadr argument))
-           (values (caar argument) (cadar argument) it is ia)))
+         (let ((spec (parse-interactive-component (cadr argument))))
+           (values (caar argument) (cadar argument) spec)))
         (t (error 'define-command-invalid-argument-error
                   :type :key
                   :argument argument))))
 
-(defun %process-interactive-spec (spec)
-  (let ((interactive-type (car spec))
-        (interactive-symb (cadr spec)))
-    (let ((valid-type '(:default :class :function)))
-      (unless (member interactive-type valid-type)
-        (error "Invalid interactive component ~S.~%Interactive type must be one of ~S, not ~S"
-               spec valid-type interactive-type)))
-    (when (and (eql :function interactive-type)
-               (consp interactive-symb)
-               (eql 'function (car interactive-symb)))
-      (setf interactive-symb (symbol-function (second interactive-symb))))
-    (values interactive-type interactive-symb (cddr spec))))
+(defun %process-interactive-spec (interactive-type interactive-symb arg)
+  (let ((valid-type '(:default :class :function)))
+    (unless (member interactive-type valid-type)
+      (error "Invalid interactive component ~S.~%Interactive type must be one of ~S, not ~S"
+             spec valid-type interactive-type)))
+  ;; Assume that when someone writes #'foo, they want to check that
+  ;; a function foo exists at compile time:
+  (when (and (eql :function interactive-type)
+             (consp interactive-symb)
+             (eql 'function (car interactive-symb)))
+    (setf interactive-symb (symbol-function (second interactive-symb))))
+  ;; As an alternative to emitting a constructor call, we could
+  ;; impelment MAKE-LOAD-FORM on INTERACTIVE-SPEC, but that
+  ;; seems a bit sketchy. It would enable us to move
+  ;; some validation higher up in the callstack for this macro,
+  ;; but it's not needed right now. We could also leave it alone
+  ;; (including the function transformation) until further on,
+  ;; but again, we don't do any processing of this data past
+  ;; this point.
+  `(make-interactive-spec
+    ,interactive-type
+    ,(if (functionp interactive-symb)
+         `(function interactive-symb)
+         `(quote ,interactive-symb))
+    (list ,@arg)))
 
 (defun parse-interactive-component (component)
-  "Return the interactive type, the interactive symbol, and the interactive
-arguments as multiple values"
+  "Return the interactive-spec from the given interactive component."
   (cond ((null component) nil)
         ((symbolp component)
-         (values :default component))
+         (%process-interactive-spec :default component nil))
         ((and (consp component)
               (keywordp (car component)))
-         (%process-interactive-spec component))
+         (%process-interactive-spec (car component) (cadr component) (cddr component)))
         ((and (consp component)
               (symbolp (car component)))
-         (values :default (car component) (cdr component)))
+         (%process-interactive-spec :default (car component) (cdr component)))
         (t (error "Invalid interactive component ~S" component))))
 
 (defmacro with-options ((remaining &rest options) options-list &body body)
