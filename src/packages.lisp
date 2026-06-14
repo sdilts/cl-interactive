@@ -36,6 +36,7 @@
            #:map-database
            #:search-in-database
            #:add-to-database
+           #:find-command
            #:database-strings
 
            #:cl-interactive-error
@@ -78,6 +79,7 @@
                 #:database
                 #:make-database
                 #:map-database
+                #:find-command
                 #:database-strings
                 #:search-in-database
                 #:add-to-database)

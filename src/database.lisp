@@ -39,8 +39,6 @@ strings)."))
                                 &allow-other-keys)
   (:documentation "Search DATABASE for STRING.
 
-
-
  STRING may be a canonical string or
 a local string. Return two values, the object or objects found, and T if any
 objects were found.
@@ -58,6 +56,9 @@ Return DEFAULT if no objects were found to match STRING."))
 (defgeneric add-to-database (database object local-string canonical-string)
   (:documentation "Add OBJECT to DATABASE, interned under LOCAL-STRING and
 CANONICAL-STRING"))
+
+(defgeneric find-command (database string)
+  (:documentation "Retreive a command from DATABASE that fully matches STRING"))
 
 (defmethod map-database ((function function) (database database)
                          &key (which :hash) (string-type :both) (prefer :local)
@@ -202,6 +203,11 @@ found. Returns a list of all matching objects."
     (add-string-to-tree (canonical-search-tree db) canonical-string object)
     (setf (gethash canonical-string (canonical-hash-table db)) object))
   object)
+
+(defmethod find-command ((db database) string)
+  (or
+   (gethash string (local-hash-table db))
+   (gethash string (canonical-hash-table db))))
 
 
 ;; (defclass database ()
