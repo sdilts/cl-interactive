@@ -28,40 +28,55 @@ an error is signalled. "
     (check-type input-method input-method)
     input-method))
 
+(defun %handle-error-interactively (input-method c)
+  (handler-bind
+      ((error
+         (interactive-error-handler-for-input-method input-method)))
+    (let* ((*print-readably* nil) ; Some restarts appear to be unprintable
+           (rs (compute-restarts c))
+           (im (input-method (if (functionp input-method)
+                                 (funcall input-method c)
+                                 input-method))))
+      (format *debug-io* "Interactively handling condition ~A~%~%with restarts:~%~{~4T~A~%~}"
+              (with-output-to-string (s)
+                (describe c s))
+              rs)
+      #+sbcl
+      (sb-debug:print-backtrace)
+      (finish-output *debug-io*)
+      (restart-case
+          (when (and rs im)
+            (flet ((rn (r) (format nil "~A" r)))
+              (let ((r (handler-bind
+                           ((error (lambda (condition)
+                                     (format *debug-io* "~&Aborting interactive error handler due to nested condition: ~A"
+                                             (with-output-to-string (s)
+                                               (describe condition s)))
+                                     (finish-output *debug-io*)
+                                     (invoke-restart 'abort-interactive-error-handler))))
+                         (completing-read im (format nil "~A" c)
+                                          :completions (mapcar #'rn rs)))))
+                (when r
+                  (let ((r (find r rs :key #'rn :test #'string=)))
+                    (when r
+                      (invoke-restart r)))))))
+        (abort-interactive-error-handler ()
+          :report "Abort from interactive error handler"
+          (error c))))))
+
 (defun interactive-error-handler-for-input-method (&optional input-method)
   "Handle errors interactively using an input method. If INPUT-METHOD is a
 function it will be called in the handler and must return either NIL or an input
 method object."
   (flet ((handler (c)
-           (handler-bind
-               ((error
-                  (interactive-error-handler-for-input-method input-method)))
-             (let ((rs (compute-restarts c))
-                   (im (input-method (if (functionp input-method)
-                                         (funcall input-method c)
-                                         input-method))))
-               (when (and rs im)
-                 (flet ((rn (r) (format nil "~A" r)))
-                   (let ((r (handler-bind
-                                ((error (lambda (condition)
-                                          (declare (ignore condition))
-                                          (invoke-restart 'abort-interactive-error-handler))))
-                              (completing-read im (format nil "~A" c)
-                                               :completions (mapcar #'rn rs)))))
-                     (when r
-                       (let ((r (find r rs :key #'rn :test #'string=)))
-                         (when r
-                           (invoke-restart-interactively r)))))))))))
+           (%handle-error-interactively input-method c)))
     (declare (special *nested*))
     (if (boundp '*nested*)
         #'handler
         (lambda (c)
           (let ((*nested* t))
             (declare (special *nested*))
-            (restart-case (handler c)
-              (abort-interactive-error-handler ()
-                :report "Abort from interactive error handler"
-                nil)))))))
+            (%handle-error-interactively input-method c))))))
 
 (defgeneric prepare-completions-for-input-method (input-method completions)
   (:documentation
